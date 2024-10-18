@@ -49,7 +49,7 @@ ENV HUGGINGFACE_HUB_CACHE=/models
 ENV DIFFUSERS_CACHE=/models
 ENV MODEL_DIR=/models
 # This ensures compatbility with how GPUs are addresses within go-livepeer
-ENV CUDA_DEVICE_ORDER=PCI_BUS_ID
+# ENV CUDA_DEVICE_ORDER=PCI_BUS_ID
 
 COPY app/ /app/app
 COPY images/ /app/images

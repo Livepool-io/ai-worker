@@ -13,6 +13,7 @@ logger = logging.getLogger(__name__)
 
 class LLMPipeline(Pipeline):
     def __init__(self, model_id: str):
+        logger.info("Initializing LLM pipeline")
         self.model_id = model_id
         folder_name = file_download.repo_folder_name(repo_id=model_id, repo_type="model")
         base_path = os.path.join(get_model_dir(), folder_name)
@@ -24,13 +25,20 @@ class LLMPipeline(Pipeline):
             raise ValueError(f"Could not find model files for {model_id}")
 
         use_8bit = os.getenv("USE_8BIT", "").strip().lower() == "true"
-        max_batch_size = int(os.getenv("MAX_BATCH_SIZE", "4096"))
+        max_num_batched_tokens = int(os.getenv("MAX_NUM_BATCHED_TOKENS", "8192"))
         max_num_seqs = int(os.getenv("MAX_NUM_SEQS", "128"))
-        mem_utilization = float(os.getenv("GPU_MEMORY_UTILIZATION", "0.80"))
+        max_model_len = int(os.getenv("MAX_MODEL_LEN", "8192"))
+        mem_utilization = float(os.getenv("GPU_MEMORY_UTILIZATION", "0.85"))
+
+        if max_num_batched_tokens < max_model_len:
+            max_num_batched_tokens = max_model_len
+            logger.info(f"max_num_batched_tokens ({max_num_batched_tokens}) is smaller than max_model_len ({max_model_len}). This effectively limits the maximum sequence length to max_num_batched_tokens and makes vLLM reject longer sequences.")
+            logger.info(f"setting 'max_model_len' to equal 'max_num_batched_tokens'")
 
         # Get available GPU memory
         max_memory = get_max_memory()       
         logger.info(f"Available GPU memory: {max_memory.gpu_memory}")
+        logger.info(f"Tensor parallel size: {max_memory.num_gpus}")
 
         engine_args = AsyncEngineArgs(
             model=self.local_model_path,
@@ -39,11 +47,12 @@ class LLMPipeline(Pipeline):
             dtype="auto",  # This specifies BFloat16 precision, TODO: Check GPU capabilities to set best type
             kv_cache_dtype="auto",  # or "fp16" if you want to force it
             tensor_parallel_size=max_memory.num_gpus,
-            max_num_batched_tokens=max_batch_size,
+            max_num_batched_tokens=max_num_batched_tokens,
             gpu_memory_utilization=mem_utilization,
             max_num_seqs=max_num_seqs,
             enforce_eager=False,
             enable_prefix_caching=True,
+            max_model_len=max_model_len
         )
 
         if use_8bit:
